@@ -1,43 +1,102 @@
-// Main Application
+// Main Application - Optimized with Sticky Notes
 class QuakePHMap {
     constructor() {
-        // DOM Elements
-        this.sidebar = document.getElementById('sidebar');
-        this.toggleSidebar = document.getElementById('toggleSidebar');
-        this.mobileToggle = document.getElementById('mobileToggle');
-        this.layerButtons = document.querySelectorAll('.layer-btn');
-        this.mapLayers = {
-            base: document.getElementById('baseMap'),
-            hazard: document.getElementById('hazardMap'),
-            risk: document.getElementById('riskMap')
-        };
-        this.currentLayerTitle = document.getElementById('currentLayerTitle');
-        this.legendContent = document.getElementById('legendContent');
-        this.lastUpdate = document.getElementById('lastUpdate');
-        this.quakeList = document.getElementById('quakeList');
-        this.quakePanel = document.getElementById('quakePanel');
-        this.closeQuakePanel = document.getElementById('closeQuakePanel');
-        this.toggleQuakePanel = document.getElementById('toggleQuakePanel');
-        this.refreshBtn = document.getElementById('refreshBtn');
-        this.locateBtn = document.getElementById('locateBtn');
-        this.fullscreenBtn = document.getElementById('fullscreenBtn');
-        this.loadingOverlay = document.getElementById('loadingOverlay');
-        this.quakeCount = document.getElementById('quakeCount');
-        this.toggleLayers = document.getElementById('toggleLayers');
-        this.toggleDrawing = document.getElementById('toggleDrawing');
+        // Cache DOM elements in a single pass
+        this.cacheDOMElements();
         
-        // Drawing Tools Elements
-        this.drawButtons = {
-            marker: document.getElementById('drawMarker'),
-            line: document.getElementById('drawLine'),
-            polygon: document.getElementById('drawPolygon'),
-            rectangle: document.getElementById('drawRectangle'),
-            circle: document.getElementById('drawCircle'),
-            text: document.getElementById('drawText'),
-            delete: document.getElementById('deleteSelected'),
-            clear: document.getElementById('clearAllDrawings'),
-            export: document.getElementById('exportDrawings')
+        // Initialize state
+        this.state = {
+            map: null,
+            quakeMarkers: [],
+            faultLines: null,
+            earthquakeData: [],
+            currentLayer: 'earthquake',
+            autoRefreshInterval: null,
+            drawings: [],
+            nextDrawingId: 1,
+            isDrawingActive: false,
+            isDrawingEnabled: false,
+            selectedDrawing: null,
+            drawingMode: null,
+            hasShownDrawingPopup: false,
+            textModalLatLng: null
         };
+        
+        // Layer groups
+        this.layers = {
+            quake: L.layerGroup(),
+            fault: L.layerGroup(),
+            drawnItems: new L.FeatureGroup()
+        };
+        
+        // Initialize
+        this.init();
+    }
+    
+    cacheDOMElements() {
+        // Use object destructuring for cleaner code
+        const elements = {
+            sidebar: 'sidebar',
+            toggleSidebar: 'toggleSidebar',
+            mobileToggle: 'mobileToggle',
+            layerButtons: '.layer-btn',
+            mapLayers: { base: 'baseMap', hazard: 'hazardMap', risk: 'riskMap' },
+            currentLayerTitle: 'currentLayerTitle',
+            legendContent: 'legendContent',
+            lastUpdate: 'lastUpdate',
+            quakeList: 'quakeList',
+            quakePanel: 'quakePanel',
+            closeQuakePanel: 'closeQuakePanel',
+            toggleQuakePanel: 'toggleQuakePanel',
+            refreshBtn: 'refreshBtn',
+            locateBtn: 'locateBtn',
+            fullscreenBtn: 'fullscreenBtn',
+            loadingOverlay: 'loadingOverlay',
+            quakeCount: 'quakeCount',
+            toggleLayers: 'toggleLayers',
+            toggleDrawing: 'toggleDrawing'
+        };
+        
+        // Create DOM element cache
+        this.dom = {};
+        Object.entries(elements).forEach(([key, value]) => {
+            if (typeof value === 'string') {
+                this.dom[key] = document.getElementById(value);
+            }
+        });
+        
+        // Handle layer buttons separately
+        this.dom.layerButtons = document.querySelectorAll('.layer-btn');
+        
+        // Map layers
+        this.dom.mapLayers = {};
+        Object.entries(elements.mapLayers).forEach(([key, id]) => {
+            this.dom.mapLayers[key] = document.getElementById(id);
+        });
+        
+        // Drawing tools
+        this.cacheDrawingElements();
+    }
+    
+    cacheDrawingElements() {
+        const drawIds = {
+            marker: 'drawMarker',
+            line: 'drawLine',
+            polygon: 'drawPolygon',
+            rectangle: 'drawRectangle',
+            circle: 'drawCircle',
+            text: 'drawText',
+            delete: 'deleteSelected',
+            clear: 'clearAllDrawings',
+            export: 'exportDrawings'
+        };
+        
+        this.drawButtons = {};
+        Object.entries(drawIds).forEach(([key, id]) => {
+            this.drawButtons[key] = document.getElementById(id);
+        });
+        
+        // Drawing controls
         this.drawColor = document.getElementById('drawColor');
         this.lineWidth = document.getElementById('lineWidth');
         this.widthValue = document.getElementById('widthValue');
@@ -45,40 +104,28 @@ class QuakePHMap {
         this.opacityValue = document.getElementById('opacityValue');
         this.drawingsList = document.getElementById('drawingsList');
         
-        // Modal Elements
-        this.textModal = document.getElementById('textModal');
-        this.textContent = document.getElementById('textContent');
-        this.textSize = document.getElementById('textSize');
-        this.textSizeValue = document.getElementById('textSizeValue');
-        this.textColor = document.getElementById('textColor');
-        this.textBackground = document.getElementById('textBackground');
-        this.closeTextModal = document.getElementById('closeTextModal');
-        this.cancelText = document.getElementById('cancelText');
-        this.saveText = document.getElementById('saveText');
+        // Modal elements
+        const modalIds = {
+            textModal: 'textModal',
+            textContent: 'textContent',
+            textSize: 'textSize',
+            textSizeValue: 'textSizeValue',
+            textColor: 'textColor',
+            textBackground: 'textBackground',
+            closeTextModal: 'closeTextModal',
+            cancelText: 'cancelText',
+            saveText: 'saveText'
+        };
         
-        // Map Variables
-        this.map = null;
-        this.quakeMarkers = [];
-        this.faultLines = null;
-        this.earthquakeData = [];
-        this.currentLayer = 'earthquake';
-        this.autoRefreshInterval = null;
+        this.modal = {};
+        Object.entries(modalIds).forEach(([key, id]) => {
+            this.modal[key] = document.getElementById(id);
+        });
         
-        // Drawing Variables
-        this.drawControl = null;
-        this.drawnItems = new L.FeatureGroup();
-        this.drawingMode = null;
-        this.selectedDrawing = null;
-        this.drawings = [];
-        this.nextDrawingId = 1;
-        this.isDrawingActive = false;
-        this.isDrawingEnabled = false;
         this.drawingToolsPanel = document.querySelector('.drawing-tools-panel');
-        
-        // Flag to track if popup has been shown
-        this.hasShownDrawingPopup = false;
-        
-        // Initialize
+    }
+    
+    init() {
         this.initMap();
         this.initEventListeners();
         this.loadFaultLines();
@@ -86,14 +133,14 @@ class QuakePHMap {
         this.setupAutoRefresh();
         this.updateLegend();
         this.loadSavedDrawings();
-        this.updateDrawingButtonsState();
+        
+        // Initialize Sticky Notes
+        this.notesManager = new StickyNotesManager(this);
     }
     
-    // Initialize Leaflet Map
     initMap() {
-        // Create map centered on Philippines
-        this.map = L.map('baseMap', {
-            center: [12.8797, 121.7740], // Center of Philippines
+        this.state.map = L.map('baseMap', {
+            center: [12.8797, 121.7740],
             zoom: 6,
             zoomControl: true,
             attributionControl: false
@@ -102,225 +149,623 @@ class QuakePHMap {
         // Add base tile layer
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(this.map);
+        }).addTo(this.state.map);
         
-        // Add scale control
-        L.control.scale({ imperial: false }).addTo(this.map);
+        // Add controls
+        L.control.scale({ imperial: false }).addTo(this.state.map);
+        L.control.attribution({ position: 'bottomright' })
+            .addTo(this.state.map)
+            .addAttribution('QuakePH | Philippine Earthquake Monitor');
         
-        // Add custom attribution
-        L.control.attribution({
-            position: 'bottomright'
-        }).addTo(this.map).addAttribution('QuakePH | Philippine Earthquake Monitor');
-        
-        // Create layer groups
-        this.quakeLayerGroup = L.layerGroup().addTo(this.map);
-        this.faultLayerGroup = L.layerGroup();
-        
-        // Add drawing layer to map
-        this.drawnItems.addTo(this.map);
+        // Add layer groups to map
+        this.layers.quake.addTo(this.state.map);
+        this.layers.drawnItems.addTo(this.state.map);
     }
     
-    // Initialize Drawing System
-    initDrawingSystem() {
-        // Initialize draw control (only when needed)
-        this.drawControl = new L.Control.Draw({
-            position: 'topleft',
-            draw: {
-                polyline: {
-                    shapeOptions: {
-                        color: this.drawColor.value,
-                        weight: parseInt(this.lineWidth.value)
-                    }
-                },
-                polygon: {
-                    shapeOptions: {
-                        color: this.drawColor.value,
-                        weight: parseInt(this.lineWidth.value),
-                        fillColor: this.drawColor.value,
-                        fillOpacity: parseInt(this.fillOpacity.value) / 100
-                    }
-                },
-                rectangle: {
-                    shapeOptions: {
-                        color: this.drawColor.value,
-                        weight: parseInt(this.lineWidth.value),
-                        fillColor: this.drawColor.value,
-                        fillOpacity: parseInt(this.fillOpacity.value) / 100
-                    }
-                },
-                circle: {
-                    shapeOptions: {
-                        color: this.drawColor.value,
-                        weight: parseInt(this.lineWidth.value),
-                        fillColor: this.drawColor.value,
-                        fillOpacity: parseInt(this.fillOpacity.value) / 100
-                    }
-                },
-                marker: {
-                    icon: L.divIcon({
-                        className: 'custom-marker',
-                        html: `<div style="background: ${this.drawColor.value}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    })
-                }
-            },
-            edit: {
-                featureGroup: this.drawnItems,
-                remove: false
+    initEventListeners() {
+        // Sidebar events
+        this.dom.toggleSidebar?.addEventListener('click', () => this.toggleSidebar());
+        this.dom.mobileToggle?.addEventListener('click', () => this.toggleSidebar());
+        
+        // Layer buttons
+        this.dom.layerButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchLayer(e.currentTarget));
+        });
+        
+        // Panel events
+        this.dom.toggleQuakePanel?.addEventListener('click', () => this.toggleEarthquakePanel());
+        this.dom.closeQuakePanel?.addEventListener('click', () => this.toggleEarthquakePanel());
+        
+        // Control buttons
+        this.dom.refreshBtn?.addEventListener('click', () => this.loadEarthquakeData());
+        this.dom.locateBtn?.addEventListener('click', () => this.locateUser());
+        this.dom.fullscreenBtn?.addEventListener('click', () => this.toggleFullscreen());
+        this.dom.toggleLayers?.addEventListener('click', () => this.toggleSidebar());
+        this.dom.toggleDrawing?.addEventListener('click', () => this.toggleDrawingTools());
+        
+        // Drawing events
+        this.initDrawingEvents();
+        
+        // Map click for text drawing
+        this.state.map.on('click', (e) => {
+            if (this.state.drawingMode === 'text') {
+                this.openTextModal(e.latlng);
             }
         });
         
-        // Add draw control to map
-        this.map.addControl(this.drawControl);
-        
-        // Handle drawing created event
-        this.map.on(L.Draw.Event.CREATED, (e) => {
-            const layer = e.layer;
-            const type = e.layerType;
-            
-            // Style the drawn item
-            this.styleDrawnItem(layer, type);
-            
-            // Add to drawn items
-            this.drawnItems.addLayer(layer);
-            
-            // Save drawing
-            this.saveDrawing(layer, type);
-            
-            // Exit drawing mode
-            this.exitDrawingMode();
-            
-            // Select the new drawing
-            this.selectDrawing(layer);
+        // Escape key handler
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.state.isDrawingActive) {
+                this.exitDrawingMode();
+            }
         });
         
-        // Handle drawing edited event
-        this.map.on(L.Draw.Event.EDITED, (e) => {
-            const layers = e.layers;
-            layers.eachLayer((layer) => {
-                this.updateDrawing(layer);
+        // Window resize handler (debounced)
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => this.state.map?.invalidateSize(), 250);
+        });
+        
+        // Fullscreen change
+        document.addEventListener('fullscreenchange', () => {
+            setTimeout(() => this.state.map?.invalidateSize(), 300);
+        });
+    }
+    
+    initDrawingEvents() {
+        // Drawing buttons
+        Object.entries(this.drawButtons).forEach(([mode, btn]) => {
+            if (!btn) return;
+            
+            const handlers = {
+                marker: () => this.enterDrawingMode('marker'),
+                line: () => this.enterDrawingMode('polyline'),
+                polygon: () => this.enterDrawingMode('polygon'),
+                rectangle: () => this.enterDrawingMode('rectangle'),
+                circle: () => this.enterDrawingMode('circle'),
+                text: () => this.startTextDrawing(),
+                delete: () => this.deleteSelectedDrawing(),
+                clear: () => this.clearAllDrawings(),
+                export: () => this.exportDrawings()
+            };
+            
+            if (handlers[mode]) {
+                btn.addEventListener('click', handlers[mode]);
+            }
+        });
+        
+        // Drawing property controls
+        this.lineWidth?.addEventListener('input', (e) => {
+            this.widthValue.textContent = e.target.value + 'px';
+        });
+        
+        this.fillOpacity?.addEventListener('input', (e) => {
+            this.opacityValue.textContent = e.target.value + '%';
+        });
+        
+        this.modal.textSize?.addEventListener('input', (e) => {
+            this.modal.textSizeValue.textContent = e.target.value + 'px';
+        });
+        
+        // Modal events
+        this.modal.closeTextModal?.addEventListener('click', () => this.closeTextModal());
+        this.modal.cancelText?.addEventListener('click', () => this.closeTextModal());
+        this.modal.saveText?.addEventListener('click', () => this.saveTextAnnotation());
+    }
+    
+    switchLayer(button) {
+        const layerId = button.dataset.layer;
+        if (!layerId) return;
+        
+        // Update button states
+        this.dom.layerButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        
+        // Hide all layers
+        Object.values(this.dom.mapLayers).forEach(layer => layer?.classList.remove('active'));
+        
+        // Remove fault lines if present
+        if (this.layers.fault && this.state.map.hasLayer(this.layers.fault)) {
+            this.state.map.removeLayer(this.layers.fault);
+        }
+        
+        // Exit drawing mode
+        this.exitDrawingMode();
+        
+        // Update based on layer
+        const layerConfig = {
+            earthquake: {
+                title: 'Philippine Earthquake Map',
+                activeLayer: 'base',
+                showFault: false
+            },
+            hazard: {
+                title: 'Seismic Hazard Map',
+                activeLayer: 'hazard',
+                showFault: false
+            },
+            risk: {
+                title: 'Seismic Risk Map',
+                activeLayer: 'risk',
+                showFault: false
+            },
+            fault: {
+                title: 'Philippine Fault Lines',
+                activeLayer: 'base',
+                showFault: true
+            }
+        };
+        
+        const config = layerConfig[layerId];
+        if (config) {
+            this.dom.mapLayers[config.activeLayer]?.classList.add('active');
+            this.dom.currentLayerTitle.textContent = config.title;
+            this.state.currentLayer = layerId;
+            
+            if (config.showFault && this.state.faultLines) {
+                this.state.map.addLayer(this.layers.fault);
+            }
+            
+            this.state.map.invalidateSize();
+            this.updateLegend();
+            this.updateDrawingButtonsState();
+        }
+    }
+    
+    toggleSidebar() {
+        this.dom.sidebar?.classList.toggle('collapsed');
+        this.dom.sidebar?.classList.toggle('active');
+        
+        const icon = this.dom.toggleSidebar?.querySelector('i');
+        if (icon) {
+            icon.className = this.dom.sidebar?.classList.contains('collapsed') 
+                ? 'fas fa-chevron-right' 
+                : 'fas fa-chevron-left';
+        }
+        
+        setTimeout(() => this.state.map?.invalidateSize(), 300);
+    }
+    
+    toggleEarthquakePanel() {
+        this.dom.quakePanel?.classList.toggle('active');
+    }
+    
+    toggleDrawingTools() {
+        this.drawingToolsPanel?.classList.toggle('active');
+        this.dom.toggleDrawing?.classList.toggle('active');
+        
+        if (this.drawingToolsPanel?.classList.contains('active')) {
+            this.showNotification('Drawing tools activated. Drawings are only available on Earthquake Map and Fault Lines layers.', 'info');
+        }
+    }
+    
+    loadFaultLines() {
+        fetch('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json')
+            .then(response => response.json())
+            .then(data => {
+                this.state.faultLines = L.geoJSON(data, {
+                    style: {
+                        color: '#facc15',
+                        weight: 2,
+                        opacity: 0.7,
+                        dashArray: '5, 5'
+                    },
+                    onEachFeature: (feature, layer) => {
+                        if (feature.properties?.Name) {
+                            layer.bindPopup(`<b>Fault Line:</b> ${feature.properties.Name}`);
+                        }
+                    }
+                });
+                this.layers.fault.addLayer(this.state.faultLines);
+            })
+            .catch(error => console.error('Error loading fault lines:', error));
+    }
+    
+    loadEarthquakeData() {
+        this.showLoading(true);
+        
+        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson')
+            .then(response => response.json())
+            .then(data => {
+                this.state.earthquakeData = data.features;
+                this.displayEarthquakes();
+                this.updateEarthquakeList();
+                this.updateLastUpdateTime();
+                this.showLoading(false);
+            })
+            .catch(error => {
+                console.error('Error loading earthquake data:', error);
+                this.showLoading(false);
+                this.showNotification('Failed to load earthquake data. Please try again.', 'error');
+            });
+    }
+    
+    displayEarthquakes() {
+        this.layers.quake.clearLayers();
+        this.state.quakeMarkers = [];
+        
+        this.state.earthquakeData.forEach(feature => {
+            const coords = feature.geometry.coordinates;
+            const latlng = [coords[1], coords[0]];
+            const mag = feature.properties.mag;
+            
+            const marker = L.circleMarker(latlng, {
+                radius: this.getMarkerRadius(mag),
+                fillColor: this.getMagnitudeColor(mag),
+                color: '#ffffff',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.7
+            });
+            
+            marker.bindPopup(this.createPopupContent(feature));
+            marker.addTo(this.layers.quake);
+            
+            this.state.quakeMarkers.push({
+                marker,
+                magnitude: mag,
+                time: new Date(feature.properties.time)
             });
         });
         
-        // Handle drawing selection
-        this.map.on('click', (e) => {
+        this.dom.quakeCount.textContent = this.state.earthquakeData.length;
+    }
+    
+    createPopupContent(feature) {
+        const coords = feature.geometry.coordinates;
+        return `
+            <div class="quake-popup">
+                <h3>M ${feature.properties.mag.toFixed(1)}</h3>
+                <p><strong>Location:</strong> ${feature.properties.place}</p>
+                <p><strong>Time:</strong> ${new Date(feature.properties.time).toLocaleString()}</p>
+                <p><strong>Depth:</strong> ${coords[2].toFixed(1)} km</p>
+                <p><strong>Status:</strong> ${feature.properties.status}</p>
+                <button onclick="quakeMap.zoomToEarthquake(${coords[1]}, ${coords[0]})" 
+                        style="margin-top: 10px; padding: 5px 10px; background: #00b4d8; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Zoom to Location
+                </button>
+            </div>
+        `;
+    }
+    
+    updateEarthquakeList() {
+        if (!this.dom.quakeList) return;
+        
+        const sortedQuakes = [...this.state.earthquakeData]
+            .sort((a, b) => b.properties.mag - a.properties.mag);
+        
+        this.dom.quakeList.innerHTML = sortedQuakes.map(feature => {
+            const mag = feature.properties.mag;
+            const color = this.getMagnitudeColor(mag);
+            const time = new Date(feature.properties.time);
+            const coords = feature.geometry.coordinates;
+            
+            return `
+                <div class="quake-item" style="border-left-color: ${color}" data-lat="${coords[1]}" data-lng="${coords[0]}">
+                    <div class="quake-magnitude" style="color: ${color}">M ${mag.toFixed(1)}</div>
+                    <div class="quake-location">${feature.properties.place}</div>
+                    <div class="quake-time">
+                        <i class="far fa-clock"></i>
+                        ${time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers
+        this.dom.quakeList.querySelectorAll('.quake-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const lat = parseFloat(item.dataset.lat);
+                const lng = parseFloat(item.dataset.lng);
+                this.zoomToEarthquake(lat, lng);
+            });
+        });
+    }
+    
+    zoomToEarthquake(lat, lng) {
+        this.state.map.setView([lat, lng], 8);
+        
+        const marker = this.state.quakeMarkers.find(m => 
+            m.marker.getLatLng().lat === lat && m.marker.getLatLng().lng === lng
+        );
+        
+        if (marker) {
+            marker.marker.openPopup();
+            this.highlightEarthquakeMarker(lat, lng);
+        }
+    }
+    
+    highlightEarthquakeMarker(lat, lng) {
+        this.state.quakeMarkers.forEach(m => {
+            const markerLat = m.marker.getLatLng().lat;
+            const markerLng = m.marker.getLatLng().lng;
+            
+            if (markerLat === lat && markerLng === lng) {
+                m.marker.setStyle({ color: '#ffffff', weight: 3, fillOpacity: 0.9 });
+                setTimeout(() => m.marker.setStyle({ color: '#ffffff', weight: 1, fillOpacity: 0.7 }), 3000);
+            }
+        });
+    }
+    
+    getMagnitudeColor(magnitude) {
+        if (magnitude < 3) return '#4cd964';
+        if (magnitude < 4) return '#ffcc00';
+        if (magnitude < 5) return '#ff9500';
+        if (magnitude < 6) return '#ff3b30';
+        return '#8b0000';
+    }
+    
+    getMarkerRadius(magnitude) {
+        return Math.max(magnitude * 3, 8);
+    }
+    
+    updateLegend() {
+        if (!this.dom.legendContent) return;
+        
+        const legends = {
+            earthquake: `
+                ${[3,4,5,6].map(mag => `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: ${this.getMagnitudeColor(mag-0.1)}"></div>
+                        <span>Magnitude ${mag-1}.0 - ${mag-0.1}</span>
+                    </div>
+                `).join('')}
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8b0000"></div>
+                    <span>Magnitude ≥ 6.0</span>
+                </div>
+            `,
+            hazard: '<div class="legend-item"><div class="legend-info">Seismic Hazard Map shows probability of strong ground shaking. Colors indicate Peak Ground Acceleration (PGA).</div></div>',
+            risk: '<div class="legend-item"><div class="legend-info">Seismic Risk Map shows estimated economic losses. Darker colors indicate higher risk areas.</div></div>',
+            fault: '<div class="legend-item"><div class="legend-color" style="background: #facc15"></div><span>Major Fault Lines</span></div>'
+        };
+        
+        this.dom.legendContent.innerHTML = legends[this.state.currentLayer] || '';
+    }
+    
+    updateLastUpdateTime() {
+        if (this.dom.lastUpdate) {
+            this.dom.lastUpdate.textContent = new Date().toLocaleTimeString([], { 
+                hour: '2-digit', minute: '2-digit', second: '2-digit' 
+            });
+        }
+    }
+    
+    showLoading(show) {
+        if (this.dom.loadingOverlay) {
+            this.dom.loadingOverlay.style.display = show ? 'flex' : 'none';
+        }
+    }
+    
+    setupAutoRefresh() {
+        if (this.state.autoRefreshInterval) {
+            clearInterval(this.state.autoRefreshInterval);
+        }
+        this.state.autoRefreshInterval = setInterval(() => this.loadEarthquakeData(), 5 * 60 * 1000);
+    }
+    
+    locateUser() {
+        if (!navigator.geolocation) {
+            this.showNotification('Geolocation is not supported by your browser', 'error');
+            return;
+        }
+        
+        this.showLoading(true);
+        
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                this.state.map.setView([latitude, longitude], 10);
+                this.showLoading(false);
+                
+                L.marker([latitude, longitude], {
+                    icon: L.divIcon({
+                        className: 'user-marker',
+                        html: '<i class="fas fa-user" style="color: #00b4d8; font-size: 24px;"></i>',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(this.state.map).bindPopup('Your Location').openPopup();
+            },
+            () => {
+                this.showLoading(false);
+                this.showNotification('Unable to retrieve your location', 'error');
+            }
+        );
+    }
+    
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(console.error);
+        } else if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+    
+    // Drawing methods
+    enterDrawingMode(mode) {
+        if (!this.isDrawingAvailable()) {
+            this.showNotification('Drawing is only available on Earthquake Map and Fault Lines layers', 'error');
+            return;
+        }
+        
+        this.showDrawingPopup();
+        this.exitDrawingMode();
+        this.state.drawingMode = mode;
+        
+        if (!this.drawControl) {
+            this.initDrawingSystem();
+        }
+        
+        // Activate draw control
+        const drawOptions = {
+            marker: L.Draw.Marker,
+            polyline: L.Draw.Polyline,
+            polygon: L.Draw.Polygon,
+            rectangle: L.Draw.Rectangle,
+            circle: L.Draw.Circle
+        };
+        
+        if (drawOptions[mode]) {
+            new drawOptions[mode](this.state.map, this.drawControl.options.draw[mode]).enable();
+        }
+        
+        this.updateDrawButtonStates(mode);
+        this.state.isDrawingActive = true;
+        this.showDrawingModeIndicator(mode);
+    }
+    
+    isDrawingAvailable() {
+        return ['earthquake', 'fault'].includes(this.state.currentLayer);
+    }
+    
+    updateDrawButtonStates(activeMode = null) {
+        Object.entries(this.drawButtons).forEach(([mode, btn]) => {
+            if (btn) {
+                btn.classList.toggle('active', mode === activeMode);
+            }
+        });
+    }
+    
+    initDrawingSystem() {
+        this.drawControl = new L.Control.Draw({
+            position: 'topleft',
+            draw: this.getDrawOptions(),
+            edit: { featureGroup: this.layers.drawnItems, remove: false }
+        });
+        
+        this.state.map.addControl(this.drawControl);
+        
+        // Handle drawing events
+        this.state.map.on(L.Draw.Event.CREATED, (e) => {
+            this.styleDrawnItem(e.layer, e.layerType);
+            this.layers.drawnItems.addLayer(e.layer);
+            this.saveDrawing(e.layer, e.layerType);
+            this.exitDrawingMode();
+            this.selectDrawing(e.layer);
+        });
+        
+        this.state.map.on(L.Draw.Event.EDITED, (e) => {
+            e.layers.eachLayer(layer => this.updateDrawing(layer));
+        });
+        
+        this.state.map.on('click', (e) => {
             if (!e.originalEvent.propagatedFromDrawing) {
                 this.deselectAllDrawings();
             }
         });
     }
     
-    // Style a drawn item
+    getDrawOptions() {
+        return {
+            polyline: { shapeOptions: this.getShapeOptions() },
+            polygon: { shapeOptions: this.getShapeOptions(true) },
+            rectangle: { shapeOptions: this.getShapeOptions(true) },
+            circle: { shapeOptions: this.getShapeOptions(true) },
+            marker: { icon: this.getMarkerIcon() }
+        };
+    }
+    
+    getShapeOptions(fill = false) {
+        const options = {
+            color: this.drawColor.value,
+            weight: parseInt(this.lineWidth.value),
+            opacity: 0.8
+        };
+        
+        if (fill) {
+            options.fillColor = this.drawColor.value;
+            options.fillOpacity = parseInt(this.fillOpacity.value) / 100;
+        }
+        
+        return options;
+    }
+    
+    getMarkerIcon() {
+        return L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="background: ${this.drawColor.value}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+    }
+    
     styleDrawnItem(layer, type) {
         const color = this.drawColor.value;
         const width = parseInt(this.lineWidth.value);
         const opacity = parseInt(this.fillOpacity.value) / 100;
         
-        switch(type) {
-            case 'marker':
-                // Already styled by the draw control
-                break;
-                
-            case 'polyline':
-                layer.setStyle({
-                    color: color,
-                    weight: width,
-                    opacity: 0.8
-                });
-                break;
-                
-            case 'polygon':
-            case 'rectangle':
-                layer.setStyle({
-                    color: color,
-                    weight: width,
-                    opacity: 0.8,
-                    fillColor: color,
-                    fillOpacity: opacity
-                });
-                break;
-                
-            case 'circle':
-                layer.setStyle({
-                    color: color,
-                    weight: width,
-                    opacity: 0.8,
-                    fillColor: color,
-                    fillOpacity: opacity * 0.5
-                });
-                break;
+        if (type !== 'marker') {
+            const style = { color, weight: width, opacity: 0.8 };
+            if (['polygon', 'rectangle', 'circle'].includes(type)) {
+                style.fillColor = color;
+                style.fillOpacity = type === 'circle' ? opacity * 0.5 : opacity;
+            }
+            layer.setStyle(style);
         }
         
-        // Store drawing properties
-        layer.drawingId = this.nextDrawingId++;
+        // Store properties
+        layer.drawingId = this.state.nextDrawingId++;
         layer.drawingType = type;
         layer.drawingProperties = {
-            color: color,
-            width: width,
-            opacity: opacity,
+            color,
+            width,
+            opacity,
             createdAt: new Date().toISOString()
         };
         
-        // Add click event for selection
         layer.on('click', (e) => {
             e.originalEvent.propagatedFromDrawing = true;
             this.selectDrawing(layer);
         });
     }
     
-    // Save drawing to list
     saveDrawing(layer, type) {
         const drawing = {
             id: layer.drawingId,
-            type: type,
-            layer: layer,
-            name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${this.drawings.length + 1}`,
+            type,
+            layer,
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${this.state.drawings.length + 1}`,
             color: layer.drawingProperties.color,
-            createdAt: new Date().toISOString()
+            createdAt: layer.drawingProperties.createdAt
         };
         
-        this.drawings.push(drawing);
+        this.state.drawings.push(drawing);
         this.updateDrawingsList();
         this.saveDrawingsToStorage();
     }
     
-    // Update drawing in list
     updateDrawing(layer) {
-        const drawing = this.drawings.find(d => d.id === layer.drawingId);
+        const drawing = this.state.drawings.find(d => d.id === layer.drawingId);
         if (drawing) {
             drawing.layer = layer;
             this.saveDrawingsToStorage();
         }
     }
     
-    // Remove drawing from list
     removeDrawing(layer) {
-        this.drawings = this.drawings.filter(d => d.id !== layer.drawingId);
+        this.state.drawings = this.state.drawings.filter(d => d.id !== layer.drawingId);
         this.updateDrawingsList();
         this.saveDrawingsToStorage();
-        this.selectedDrawing = null;
+        this.state.selectedDrawing = null;
     }
     
-    // Select a drawing
     selectDrawing(layer) {
         this.deselectAllDrawings();
         
-        // Highlight selected drawing
         if (layer.setStyle && layer.drawingProperties) {
-            const currentColor = layer.drawingProperties.color || this.drawColor.value;
-            const currentWidth = layer.drawingProperties.width || parseInt(this.lineWidth.value);
             layer.setStyle({
                 color: '#ffeb3b',
-                weight: currentWidth + 2,
-                fillColor: currentColor
+                weight: (layer.drawingProperties.width || 3) + 2,
+                fillColor: layer.drawingProperties.color
             });
         }
         
         if (layer._path) {
             layer._path.classList.add('selected-drawing');
         }
-        this.selectedDrawing = layer;
+        
+        this.state.selectedDrawing = layer;
         
         // Highlight in list
         const listItem = document.querySelector(`.drawing-item[data-id="${layer.drawingId}"]`);
@@ -330,10 +775,8 @@ class QuakePHMap {
         }
     }
     
-    // Deselect all drawings
     deselectAllDrawings() {
-        // Reset styles for all drawings
-        this.drawnItems.eachLayer((layer) => {
+        this.layers.drawnItems.eachLayer((layer) => {
             if (layer.drawingProperties && layer.setStyle) {
                 layer.setStyle({
                     color: layer.drawingProperties.color,
@@ -347,34 +790,26 @@ class QuakePHMap {
             }
         });
         
-        // Clear list selection
         document.querySelectorAll('.drawing-item').forEach(item => {
             item.classList.remove('active');
         });
         
-        this.selectedDrawing = null;
+        this.state.selectedDrawing = null;
     }
     
-    // Update drawings list in sidebar
     updateDrawingsList() {
-        this.drawingsList.innerHTML = '';
+        if (!this.drawingsList) return;
         
-        if (this.drawings.length === 0) {
+        if (this.state.drawings.length === 0) {
             this.drawingsList.innerHTML = '<div class="no-drawings" style="color: rgba(255,255,255,0.5); text-align: center; padding: 1rem; font-style: italic;">No drawings yet</div>';
             return;
         }
         
-        // Sort by creation date (newest first)
-        const sortedDrawings = [...this.drawings].sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt)
-        );
+        const sortedDrawings = [...this.state.drawings]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        sortedDrawings.forEach(drawing => {
-            const drawingItem = document.createElement('div');
-            drawingItem.className = 'drawing-item';
-            drawingItem.dataset.id = drawing.id;
-            
-            drawingItem.innerHTML = `
+        this.drawingsList.innerHTML = sortedDrawings.map(drawing => `
+            <div class="drawing-item" data-id="${drawing.id}">
                 <div class="drawing-info">
                     <div class="drawing-color" style="background: ${drawing.color}"></div>
                     <span class="drawing-name">${drawing.name}</span>
@@ -384,43 +819,45 @@ class QuakePHMap {
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
-            `;
+            </div>
+        `).join('');
+        
+        // Add event listeners
+        this.drawingsList.querySelectorAll('.drawing-item').forEach(item => {
+            const id = parseInt(item.dataset.id);
+            const drawing = this.state.drawings.find(d => d.id === id);
             
-            // Add click event to select drawing
-            drawingItem.addEventListener('click', (e) => {
+            if (!drawing) return;
+            
+            item.addEventListener('click', (e) => {
                 if (!e.target.closest('.drawing-actions')) {
                     if (drawing.layer.getBounds) {
-                        this.map.setView(drawing.layer.getBounds().getCenter(), this.map.getZoom());
+                        this.state.map.setView(drawing.layer.getBounds().getCenter(), this.state.map.getZoom());
                     } else if (drawing.layer.getLatLng) {
-                        this.map.setView(drawing.layer.getLatLng(), this.map.getZoom());
+                        this.state.map.setView(drawing.layer.getLatLng(), this.state.map.getZoom());
                     }
                     this.selectDrawing(drawing.layer);
                 }
             });
             
-            // Add delete button event
-            const deleteBtn = drawingItem.querySelector('.delete-btn');
-            deleteBtn.addEventListener('click', (e) => {
+            const deleteBtn = item.querySelector('.delete-btn');
+            deleteBtn?.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.drawnItems.removeLayer(drawing.layer);
+                this.layers.drawnItems.removeLayer(drawing.layer);
                 this.removeDrawing(drawing.layer);
                 this.showNotification('Drawing deleted', 'success');
             });
-            
-            this.drawingsList.appendChild(drawingItem);
         });
     }
     
-    // Save drawings to localStorage
     saveDrawingsToStorage() {
         try {
-            const drawingsData = this.drawings.map(drawing => ({
+            const drawingsData = this.state.drawings.map(drawing => ({
                 id: drawing.id,
                 type: drawing.type,
                 name: drawing.name,
                 color: drawing.color,
                 createdAt: drawing.createdAt,
-                // Convert layer to GeoJSON for storage
                 geojson: drawing.layer.toGeoJSON()
             }));
             localStorage.setItem('quakeph_drawings', JSON.stringify(drawingsData));
@@ -429,168 +866,63 @@ class QuakePHMap {
         }
     }
     
-    // Load drawings from localStorage
     loadSavedDrawings() {
         try {
             const savedDrawings = localStorage.getItem('quakeph_drawings');
-            if (savedDrawings) {
-                const drawingsData = JSON.parse(savedDrawings);
+            if (!savedDrawings) return;
+            
+            const drawingsData = JSON.parse(savedDrawings);
+            
+            drawingsData.forEach(data => {
+                const layer = L.geoJSON(data.geojson).getLayers()[0];
+                if (!layer) return;
                 
-                drawingsData.forEach(data => {
-                    const layer = L.geoJSON(data.geojson).getLayers()[0];
-                    if (layer) {
-                        // Restore drawing properties
-                        layer.drawingId = data.id;
-                        layer.drawingType = data.type;
-                        layer.drawingProperties = {
-                            color: data.color,
-                            width: 3,
-                            opacity: 0.3,
-                            createdAt: data.createdAt
-                        };
-                        
-                        // Style the layer
-                        this.styleDrawnItem(layer, data.type);
-                        
-                        // Add to map and list
-                        this.drawnItems.addLayer(layer);
-                        this.drawings.push({
-                            id: data.id,
-                            type: data.type,
-                            layer: layer,
-                            name: data.name,
-                            color: data.color,
-                            createdAt: data.createdAt
-                        });
-                        
-                        // Update next ID
-                        this.nextDrawingId = Math.max(this.nextDrawingId, data.id + 1);
-                    }
+                layer.drawingId = data.id;
+                layer.drawingType = data.type;
+                layer.drawingProperties = {
+                    color: data.color,
+                    width: 3,
+                    opacity: 0.3,
+                    createdAt: data.createdAt
+                };
+                
+                this.styleDrawnItem(layer, data.type);
+                this.layers.drawnItems.addLayer(layer);
+                
+                this.state.drawings.push({
+                    id: data.id,
+                    type: data.type,
+                    layer,
+                    name: data.name,
+                    color: data.color,
+                    createdAt: data.createdAt
                 });
                 
-                this.updateDrawingsList();
-            }
+                this.state.nextDrawingId = Math.max(this.state.nextDrawingId, data.id + 1);
+            });
+            
+            this.updateDrawingsList();
         } catch (error) {
             console.error('Error loading drawings:', error);
         }
     }
     
-    // Enter drawing mode
-    enterDrawingMode(mode) {
-        // Show popup notification about closing the text panel
-        this.showDrawingPopup();
-        
-        // Only allow drawing on earthquake map layer
-        if (this.currentLayer !== 'earthquake' && this.currentLayer !== 'fault') {
-            this.showNotification('Drawing is only available on the Earthquake Map layer', 'error');
-            return;
-        }
-        
-        this.exitDrawingMode();
-        this.drawingMode = mode;
-        
-        // Initialize drawing system if not already initialized
-        if (!this.drawControl) {
-            this.initDrawingSystem();
-        }
-        
-        // Activate corresponding draw control
-        switch(mode) {
-            case 'marker':
-                new L.Draw.Marker(this.map, this.drawControl.options.draw.marker).enable();
-                break;
-            case 'polyline':
-                new L.Draw.Polyline(this.map, this.drawControl.options.draw.polyline).enable();
-                break;
-            case 'polygon':
-                new L.Draw.Polygon(this.map, this.drawControl.options.draw.polygon).enable();
-                break;
-            case 'rectangle':
-                new L.Draw.Rectangle(this.map, this.drawControl.options.draw.rectangle).enable();
-                break;
-            case 'circle':
-                new L.Draw.Circle(this.map, this.drawControl.options.draw.circle).enable();
-                break;
-        }
-        
-        // Update button states
-        Object.values(this.drawButtons).forEach(btn => {
-            if (btn) btn.classList.remove('active');
-        });
-        if (this.drawButtons[mode]) {
-            this.drawButtons[mode].classList.add('active');
-        }
-        
-        this.isDrawingActive = true;
-        this.showDrawingModeIndicator(mode);
-    }
-    
-    // Show drawing popup with instructions
-    showDrawingPopup() {
-        // Only show if not shown before in this session
-        if (!this.hasShownDrawingPopup) {
-            this.hasShownDrawingPopup = true;
-            
-            // Create popup element
-            const popup = document.createElement('div');
-            popup.className = 'drawing-instruction-popup';
-            popup.innerHTML = `
-                <div class="popup-content">
-                    <h3><i class="fas fa-pencil-alt"></i> Drawing Tools Activated</h3>
-                    <p>Please close the text panel on the right of the drawing tool to access the map fully.</p>
-                    <p><small>Click the earthquake panel toggle button to close it.</small></p>
-                    <button class="popup-close-btn">Got it</button>
-                </div>
-            `;
-            
-            document.body.appendChild(popup);
-            
-            // Add close button event
-            const closeBtn = popup.querySelector('.popup-close-btn');
-            closeBtn.addEventListener('click', () => {
-                popup.style.animation = 'fadeOut 0.3s ease';
-                setTimeout(() => {
-                    document.body.removeChild(popup);
-                }, 300);
-            });
-            
-            // Auto-close after 5 seconds
-            setTimeout(() => {
-                if (document.body.contains(popup)) {
-                    popup.style.animation = 'fadeOut 0.3s ease';
-                    setTimeout(() => {
-                        if (document.body.contains(popup)) {
-                            document.body.removeChild(popup);
-                        }
-                    }, 300);
-                }
-            }, 5000);
-        }
-    }
-    
-    // Exit drawing mode
     exitDrawingMode() {
-        if (this.drawingMode) {
-            this.map.fire('draw:drawstop');
-            this.drawingMode = null;
-            this.isDrawingActive = false;
-            
-            // Update button states
-            Object.values(this.drawButtons).forEach(btn => {
-                if (btn) btn.classList.remove('active');
-            });
-            
+        if (this.state.drawingMode) {
+            this.state.map.fire('draw:drawstop');
+            this.state.drawingMode = null;
+            this.state.isDrawingActive = false;
+            this.updateDrawButtonStates();
             this.hideDrawingModeIndicator();
         }
     }
     
-    // Show drawing mode indicator
     showDrawingModeIndicator(mode) {
         let indicator = document.querySelector('.drawing-mode-indicator');
         if (!indicator) {
             indicator = document.createElement('div');
             indicator.className = 'drawing-mode-indicator';
-            document.querySelector('.map-container').appendChild(indicator);
+            document.querySelector('.map-container')?.appendChild(indicator);
         }
         
         const modeNames = {
@@ -611,26 +943,85 @@ class QuakePHMap {
         
         indicator.classList.add('active');
         
-        // Add exit button event
-        const exitBtn = indicator.querySelector('.exit-drawing-btn');
-        exitBtn.addEventListener('click', () => {
+        indicator.querySelector('.exit-drawing-btn')?.addEventListener('click', () => {
             this.exitDrawingMode();
         });
     }
     
-    // Hide drawing mode indicator
     hideDrawingModeIndicator() {
-        const indicator = document.querySelector('.drawing-mode-indicator');
-        if (indicator) {
-            indicator.classList.remove('active');
-        }
+        document.querySelector('.drawing-mode-indicator')?.classList.remove('active');
     }
     
-    // Add text annotation
-    addTextAnnotation(latlng, text) {
-        const fontSize = parseInt(this.textSize.value);
-        const textColor = this.textColor.value;
-        const backgroundColor = this.textBackground.value;
+    showDrawingPopup() {
+        if (this.state.hasShownDrawingPopup) return;
+        
+        this.state.hasShownDrawingPopup = true;
+        
+        const popup = document.createElement('div');
+        popup.className = 'drawing-instruction-popup';
+        popup.innerHTML = `
+            <div class="popup-content">
+                <h3><i class="fas fa-pencil-alt"></i> Drawing Tools Activated</h3>
+                <p>Please close the text panel on the right of the drawing tool to access the map fully.</p>
+                <p><small>Click the earthquake panel toggle button to close it.</small></p>
+                <button class="popup-close-btn">Got it</button>
+            </div>
+        `;
+        
+        document.body.appendChild(popup);
+        
+        const closePopup = () => {
+            popup.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => popup.remove(), 300);
+        };
+        
+        popup.querySelector('.popup-close-btn')?.addEventListener('click', closePopup);
+        setTimeout(closePopup, 5000);
+    }
+    
+    startTextDrawing() {
+        if (!this.isDrawingAvailable()) {
+            this.showNotification('Drawing is only available on Earthquake Map and Fault Lines layers', 'error');
+            return;
+        }
+        
+        this.showDrawingPopup();
+        this.state.drawingMode = 'text';
+        this.showNotification('Click on the map to add text annotation', 'info');
+        this.updateDrawButtonStates('text');
+    }
+    
+    openTextModal(latlng) {
+        if (!this.isDrawingAvailable()) {
+            this.showNotification('Drawing is only available on Earthquake Map and Fault Lines layers', 'error');
+            return;
+        }
+        
+        if (this.modal.textContent) {
+            this.modal.textContent.value = '';
+            this.modal.textSize.value = '16';
+            this.modal.textSizeValue.textContent = '16px';
+            this.modal.textColor.value = '#ffffff';
+            this.modal.textBackground.value = '#000000';
+        }
+        
+        this.state.textModalLatLng = latlng;
+        this.modal.textModal?.classList.add('active');
+        this.modal.textContent?.focus();
+    }
+    
+    closeTextModal() {
+        this.modal.textModal?.classList.remove('active');
+        this.state.textModalLatLng = null;
+    }
+    
+    saveTextAnnotation() {
+        const text = this.modal.textContent?.value.trim();
+        if (!text || !this.state.textModalLatLng) return;
+        
+        const fontSize = parseInt(this.modal.textSize?.value || '16');
+        const textColor = this.modal.textColor?.value || '#ffffff';
+        const backgroundColor = this.modal.textBackground?.value || '#000000';
         
         const textDiv = L.divIcon({
             className: 'text-annotation',
@@ -652,96 +1043,79 @@ class QuakePHMap {
             iconAnchor: [0, 0]
         });
         
-        const marker = L.marker(latlng, {
+        const marker = L.marker(this.state.textModalLatLng, {
             icon: textDiv,
             draggable: true,
             autoPan: true
-        }).addTo(this.drawnItems);
+        }).addTo(this.layers.drawnItems);
         
-        // Store text properties
-        marker.drawingId = this.nextDrawingId++;
+        marker.drawingId = this.state.nextDrawingId++;
         marker.drawingType = 'text';
         marker.drawingProperties = {
-            text: text,
-            fontSize: fontSize,
-            textColor: textColor,
-            backgroundColor: backgroundColor,
+            text,
+            fontSize,
+            textColor,
+            backgroundColor,
             createdAt: new Date().toISOString()
         };
         
-        // Add to drawings list
-        const drawing = {
-            id: marker.drawingId,
-            type: 'text',
-            layer: marker,
-            name: `Text ${this.drawings.filter(d => d.type === 'text').length + 1}`,
-            color: textColor,
-            createdAt: new Date().toISOString()
-        };
-        
-        this.drawings.push(drawing);
-        this.updateDrawingsList();
-        this.saveDrawingsToStorage();
-        
-        // Add click event for selection
         marker.on('click', (e) => {
             e.originalEvent.propagatedFromDrawing = true;
             this.selectDrawing(marker);
         });
         
-        return marker;
+        const drawing = {
+            id: marker.drawingId,
+            type: 'text',
+            layer: marker,
+            name: `Text ${this.state.drawings.filter(d => d.type === 'text').length + 1}`,
+            color: textColor,
+            createdAt: marker.drawingProperties.createdAt
+        };
+        
+        this.state.drawings.push(drawing);
+        this.updateDrawingsList();
+        this.saveDrawingsToStorage();
+        this.closeTextModal();
+        this.exitDrawingMode();
+        this.showNotification('Text annotation added', 'success');
     }
     
-    // Open text input modal
-    openTextModal(latlng) {
-        // Only allow drawing on earthquake map layer
-        if (this.currentLayer !== 'earthquake' && this.currentLayer !== 'fault') {
-            this.showNotification('Drawing is only available on the Earthquake Map layer', 'error');
+    deleteSelectedDrawing() {
+        if (this.state.selectedDrawing) {
+            this.layers.drawnItems.removeLayer(this.state.selectedDrawing);
+            this.removeDrawing(this.state.selectedDrawing);
+            this.showNotification('Drawing deleted', 'success');
+        } else {
+            this.showNotification('No drawing selected', 'error');
+        }
+    }
+    
+    clearAllDrawings() {
+        if (this.state.drawings.length > 0 && confirm('Are you sure you want to clear all drawings? This cannot be undone.')) {
+            this.layers.drawnItems.clearLayers();
+            this.state.drawings = [];
+            this.updateDrawingsList();
+            localStorage.removeItem('quakeph_drawings');
+            this.showNotification('All drawings cleared', 'success');
+        } else if (this.state.drawings.length === 0) {
+            this.showNotification('No drawings to clear', 'info');
+        }
+    }
+    
+    exportDrawings() {
+        if (this.state.drawings.length === 0) {
+            this.showNotification('No drawings to export', 'info');
             return;
         }
         
-        this.textContent.value = '';
-        this.textSize.value = '16';
-        this.textSizeValue.textContent = '16px';
-        this.textColor.value = '#ffffff';
-        this.textBackground.value = '#000000';
-        this.textModalLatLng = latlng;
-        this.textModal.classList.add('active');
-        this.textContent.focus();
-    }
-    
-    // Close text input modal
-    closeTextModal() {
-        this.textModal.classList.remove('active');
-        this.textModalLatLng = null;
-    }
-    
-    // Save text annotation from modal
-    saveTextAnnotation() {
-        const text = this.textContent.value.trim();
-        if (text && this.textModalLatLng) {
-            this.addTextAnnotation(this.textModalLatLng, text);
-            this.closeTextModal();
-            this.exitDrawingMode();
-            this.showNotification('Text annotation added', 'success');
-        }
-    }
-    
-    // Export drawings as GeoJSON
-    exportDrawings() {
         try {
-            if (this.drawings.length === 0) {
-                this.showNotification('No drawings to export', 'info');
-                return;
-            }
-            
             const featureCollection = {
                 type: "FeatureCollection",
                 features: []
             };
             
-            // Add drawn items
-            this.drawnItems.eachLayer((layer) => {
+            this.layers.drawnItems.eachLayer((layer) => {
                 const geojson = layer.toGeoJSON();
                 geojson.properties = {
                     ...geojson.properties,
@@ -752,27 +1126,21 @@ class QuakePHMap {
                 featureCollection.features.push(geojson);
             });
             
-            // Create download link
             const dataStr = JSON.stringify(featureCollection, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-            
-            const exportFileDefaultName = `quakeph_drawings_${new Date().toISOString().slice(0,10)}.geojson`;
+            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
             
             const linkElement = document.createElement('a');
             linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.setAttribute('download', `quakeph_drawings_${new Date().toISOString().slice(0,10)}.geojson`);
             linkElement.click();
             
-            // Show success message
             this.showNotification('Drawings exported successfully!', 'success');
-            
         } catch (error) {
             console.error('Error exporting drawings:', error);
             this.showNotification('Error exporting drawings', 'error');
         }
     }
     
-    // Show notification
     showNotification(message, type = 'info') {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
@@ -782,586 +1150,565 @@ class QuakePHMap {
         
         setTimeout(() => {
             notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 300);
+            setTimeout(() => notification.remove(), 300);
         }, 3000);
     }
     
-    // Update drawing buttons state based on current layer
     updateDrawingButtonsState() {
-        const isDrawingAvailable = this.currentLayer === 'earthquake' || this.currentLayer === 'fault';
+        const isAvailable = this.isDrawingAvailable();
         
-        Object.values(this.drawButtons).forEach(btn => {
-            if (btn && btn !== this.drawButtons.clear && btn !== this.drawButtons.export) {
-                if (isDrawingAvailable) {
-                    btn.classList.remove('disabled');
-                    btn.disabled = false;
-                } else {
-                    btn.classList.add('disabled');
-                    btn.disabled = true;
-                }
-            }
-        });
-    }
-    
-    // ... (rest of the existing earthquake-related methods remain the same)
-    
-    // Load fault lines data
-    loadFaultLines() {
-        fetch('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json')
-            .then(response => response.json())
-            .then(data => {
-                this.faultLines = L.geoJSON(data, {
-                    style: {
-                        color: '#facc15',
-                        weight: 2,
-                        opacity: 0.7,
-                        dashArray: '5, 5'
-                    },
-                    onEachFeature: (feature, layer) => {
-                        if (feature.properties && feature.properties.Name) {
-                            layer.bindPopup(`<b>Fault Line:</b> ${feature.properties.Name}`);
-                        }
-                    }
-                });
-                
-                // Add to layer group
-                this.faultLayerGroup.addLayer(this.faultLines);
-            })
-            .catch(error => {
-                console.error('Error loading fault lines:', error);
-            });
-    }
-    
-    // Load earthquake data from USGS
-    loadEarthquakeData() {
-        this.showLoading(true);
-        
-        fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson')
-            .then(response => response.json())
-            .then(data => {
-                this.earthquakeData = data.features;
-                this.displayEarthquakes();
-                this.updateEarthquakeList();
-                this.updateLastUpdateTime();
-                this.showLoading(false);
-            })
-            .catch(error => {
-                console.error('Error loading earthquake data:', error);
-                this.showLoading(false);
-                this.showNotification('Failed to load earthquake data. Please try again.', 'error');
-            });
-    }
-    
-    // Display earthquakes on map
-    displayEarthquakes() {
-        // Clear existing markers
-        this.quakeLayerGroup.clearLayers();
-        this.quakeMarkers = [];
-        
-        this.earthquakeData.forEach(feature => {
-            const coords = feature.geometry.coordinates;
-            const latlng = [coords[1], coords[0]];
-            const mag = feature.properties.mag;
-            const place = feature.properties.place;
-            const time = new Date(feature.properties.time);
-            
-            // Determine color based on magnitude
-            const color = this.getMagnitudeColor(mag);
-            const radius = this.getMarkerRadius(mag);
-            
-            // Create custom marker
-            const marker = L.circleMarker(latlng, {
-                radius: radius,
-                fillColor: color,
-                color: '#ffffff',
-                weight: 1,
-                opacity: 1,
-                fillOpacity: 0.7
-            });
-            
-            // Create popup content
-            const popupContent = `
-                <div class="quake-popup">
-                    <h3>M ${mag.toFixed(1)}</h3>
-                    <p><strong>Location:</strong> ${place}</p>
-                    <p><strong>Time:</strong> ${time.toLocaleString()}</p>
-                    <p><strong>Depth:</strong> ${coords[2].toFixed(1)} km</p>
-                    <p><strong>Status:</strong> ${feature.properties.status}</p>
-                    <button onclick="quakeMap.zoomToEarthquake(${coords[1]}, ${coords[0]})" 
-                            style="margin-top: 10px; padding: 5px 10px; background: #00b4d8; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Zoom to Location
-                    </button>
-                </div>
-            `;
-            
-            marker.bindPopup(popupContent);
-            marker.addTo(this.quakeLayerGroup);
-            
-            // Store marker reference
-            this.quakeMarkers.push({
-                marker: marker,
-                magnitude: mag,
-                time: time
-            });
-        });
-        
-        // Update earthquake count badge
-        this.quakeCount.textContent = this.earthquakeData.length;
-    }
-    
-    // Update earthquake list in sidebar
-    updateEarthquakeList() {
-        this.quakeList.innerHTML = '';
-        
-        // Sort by magnitude (highest first)
-        const sortedQuakes = [...this.earthquakeData].sort((a, b) => b.properties.mag - a.properties.mag);
-        
-        sortedQuakes.forEach(feature => {
-            const mag = feature.properties.mag;
-            const place = feature.properties.place;
-            const time = new Date(feature.properties.time);
-            const coords = feature.geometry.coordinates;
-            
-            const quakeItem = document.createElement('div');
-            quakeItem.className = 'quake-item';
-            quakeItem.style.borderLeftColor = this.getMagnitudeColor(mag);
-            quakeItem.innerHTML = `
-                <div class="quake-magnitude" style="color: ${this.getMagnitudeColor(mag)}">
-                    M ${mag.toFixed(1)}
-                </div>
-                <div class="quake-location">${place}</div>
-                <div class="quake-time">
-                    <i class="far fa-clock"></i>
-                    ${time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-            `;
-            
-            // Add click event to zoom to earthquake
-            quakeItem.addEventListener('click', () => {
-                this.zoomToEarthquake(coords[1], coords[0]);
-                this.highlightEarthquakeMarker(coords[1], coords[0]);
-            });
-            
-            this.quakeList.appendChild(quakeItem);
-        });
-    }
-    
-    // Zoom to specific earthquake location
-    zoomToEarthquake(lat, lng) {
-        this.map.setView([lat, lng], 8);
-        
-        // Find and open marker popup
-        const marker = this.quakeMarkers.find(m => 
-            m.marker.getLatLng().lat === lat && m.marker.getLatLng().lng === lng
-        );
-        
-        if (marker) {
-            marker.marker.openPopup();
-        }
-    }
-    
-    // Highlight earthquake marker
-    highlightEarthquakeMarker(lat, lng) {
-        this.quakeMarkers.forEach(m => {
-            const markerLat = m.marker.getLatLng().lat;
-            const markerLng = m.marker.getLatLng().lng;
-            
-            if (markerLat === lat && markerLng === lng) {
-                m.marker.setStyle({
-                    color: '#ffffff',
-                    weight: 3,
-                    fillOpacity: 0.9
-                });
-                
-                // Reset style after 3 seconds
-                setTimeout(() => {
-                    m.marker.setStyle({
-                        color: '#ffffff',
-                        weight: 1,
-                        fillOpacity: 0.7
-                    });
-                }, 3000);
-            }
-        });
-    }
-    
-    // Get color based on magnitude
-    getMagnitudeColor(magnitude) {
-        if (magnitude < 3) return '#4cd964'; // Green
-        if (magnitude < 4) return '#ffcc00'; // Yellow
-        if (magnitude < 5) return '#ff9500'; // Orange
-        if (magnitude < 6) return '#ff3b30'; // Red
-        return '#8b0000'; // Dark Red for 6+
-    }
-    
-    // Get marker radius based on magnitude
-    getMarkerRadius(magnitude) {
-        return Math.max(magnitude * 3, 8);
-    }
-    
-    // Update legend based on current layer
-    updateLegend() {
-        let legendHTML = '';
-        
-        if (this.currentLayer === 'earthquake') {
-            legendHTML = `
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #4cd964;"></div>
-                    <span>Magnitude < 3.0</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ffcc00;"></div>
-                    <span>Magnitude 3.0 - 3.9</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ff9500;"></div>
-                    <span>Magnitude 4.0 - 4.9</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ff3b30;"></div>
-                    <span>Magnitude 5.0 - 5.9</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #8b0000;"></div>
-                    <span>Magnitude ≥ 6.0</span>
-                </div>
-            `;
-        } else if (this.currentLayer === 'hazard') {
-            legendHTML = `
-                <div class="legend-item">
-                    <div class="legend-info">
-                        <p>Seismic Hazard Map shows probability of strong ground shaking.</p>
-                        <p>Colors indicate Peak Ground Acceleration (PGA).</p>
-                    </div>
-                </div>
-            `;
-        } else if (this.currentLayer === 'risk') {
-            legendHTML = `
-                <div class="legend-item">
-                    <div class="legend-info">
-                        <p>Seismic Risk Map shows estimated economic losses.</p>
-                        <p>Darker colors indicate higher risk areas.</p>
-                    </div>
-                </div>
-            `;
-        } else if (this.currentLayer === 'fault') {
-            legendHTML = `
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #facc15;"></div>
-                    <span>Major Fault Lines</span>
-                </div>
-            `;
-        }
-        
-        this.legendContent.innerHTML = legendHTML;
-    }
-    
-    // Update last update time
-    updateLastUpdateTime() {
-        const now = new Date();
-        this.lastUpdate.textContent = now.toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            second: '2-digit'
-        });
-    }
-    
-    // Show/hide loading overlay
-    showLoading(show) {
-        if (show) {
-            this.loadingOverlay.style.display = 'flex';
-        } else {
-            this.loadingOverlay.style.display = 'none';
-        }
-    }
-    
-    // Setup auto-refresh of earthquake data
-    setupAutoRefresh() {
-        // Clear existing interval
-        if (this.autoRefreshInterval) {
-            clearInterval(this.autoRefreshInterval);
-        }
-        
-        // Set new interval (5 minutes)
-        this.autoRefreshInterval = setInterval(() => {
-            this.loadEarthquakeData();
-        }, 5 * 60 * 1000);
-    }
-    
-    // Switch between map layers
-    switchLayer(layerId) {
-        // Hide all layers
-        Object.values(this.mapLayers).forEach(layer => {
-            layer.classList.remove('active');
-        });
-        
-        // Remove fault lines from map
-        if (this.faultLayerGroup && this.map.hasLayer(this.faultLayerGroup)) {
-            this.map.removeLayer(this.faultLayerGroup);
-        }
-        
-        // Exit drawing mode when switching layers
-        this.exitDrawingMode();
-        
-        // Update current layer
-        this.currentLayer = layerId;
-        
-        // Show selected layer
-        if (layerId === 'earthquake') {
-            this.mapLayers.base.classList.add('active');
-            this.currentLayerTitle.textContent = 'Philippine Earthquake Map';
-            this.map.invalidateSize();
-        } 
-        else if (layerId === 'hazard') {
-            this.mapLayers.hazard.classList.add('active');
-            this.currentLayerTitle.textContent = 'Seismic Hazard Map';
-        }
-        else if (layerId === 'risk') {
-            this.mapLayers.risk.classList.add('active');
-            this.currentLayerTitle.textContent = 'Seismic Risk Map';
-        }
-        else if (layerId === 'fault') {
-            this.mapLayers.base.classList.add('active');
-            this.currentLayerTitle.textContent = 'Philippine Fault Lines';
-            
-            // Add fault lines to map
-            if (this.faultLines) {
-                this.map.addLayer(this.faultLayerGroup);
-                this.map.invalidateSize();
-            }
-        }
-        
-        // Update legend
-        this.updateLegend();
-        
-        // Update drawing buttons state
-        this.updateDrawingButtonsState();
-    }
-    
-    // Toggle sidebar
-    toggleSidebarView() {
-        this.sidebar.classList.toggle('collapsed');
-        this.sidebar.classList.toggle('active');
-        
-        // Update toggle button icon
-        const icon = this.toggleSidebar.querySelector('i');
-        if (this.sidebar.classList.contains('collapsed')) {
-            icon.className = 'fas fa-chevron-right';
-        } else {
-            icon.className = 'fas fa-chevron-left';
-        }
-        
-        // Invalidate map size when sidebar changes
-        setTimeout(() => {
-            this.map.invalidateSize();
-        }, 300);
-    }
-    
-    // Toggle earthquake panel
-    toggleEarthquakePanel() {
-        this.quakePanel.classList.toggle('active');
-    }
-    
-    // Locate user
-    locateUser() {
-        if (!navigator.geolocation) {
-            this.showNotification('Geolocation is not supported by your browser', 'error');
-            return;
-        }
-        
-        this.showLoading(true);
-        
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const { latitude, longitude } = position.coords;
-                this.map.setView([latitude, longitude], 10);
-                this.showLoading(false);
-                
-                // Add user marker
-                L.marker([latitude, longitude], {
-                    icon: L.divIcon({
-                        className: 'user-marker',
-                        html: '<i class="fas fa-user" style="color: #00b4d8; font-size: 24px;"></i>',
-                        iconSize: [30, 30]
-                    })
-                })
-                .addTo(this.map)
-                .bindPopup('Your Location')
-                .openPopup();
-            },
-            (error) => {
-                this.showLoading(false);
-                this.showNotification('Unable to retrieve your location', 'error');
-            }
-        );
-    }
-    
-    // Toggle fullscreen
-    toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error(`Error attempting to enable fullscreen: ${err.message}`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
-        }
-    }
-    
-    // Toggle drawing tools visibility
-    toggleDrawingTools() {
-        this.drawingToolsPanel.classList.toggle('active');
-        this.toggleDrawing.classList.toggle('active');
-        
-        if (this.drawingToolsPanel.classList.contains('active')) {
-            this.showNotification('Drawing tools activated. Drawings are only available on Earthquake Map and Fault Lines layers.', 'info');
-        }
-    }
-    
-    // Start text drawing mode
-    startTextDrawing() {
-        // Show popup notification about closing the text panel
-        this.showDrawingPopup();
-        
-        this.drawingMode = 'text';
-        this.showNotification('Click on the map to add text annotation', 'info');
-        
-        // Update button states
-        Object.values(this.drawButtons).forEach(btn => {
-            if (btn) btn.classList.remove('active');
-        });
-        this.drawButtons.text.classList.add('active');
-    }
-    
-    // Delete selected drawing
-    deleteSelectedDrawing() {
-        if (this.selectedDrawing) {
-            this.drawnItems.removeLayer(this.selectedDrawing);
-            this.removeDrawing(this.selectedDrawing);
-            this.showNotification('Drawing deleted', 'success');
-        } else {
-            this.showNotification('No drawing selected', 'error');
-        }
-    }
-    
-    // Clear all drawings
-    clearAllDrawings() {
-        if (this.drawings.length > 0) {
-            if (confirm('Are you sure you want to clear all drawings? This cannot be undone.')) {
-                this.drawnItems.clearLayers();
-                this.drawings = [];
-                this.updateDrawingsList();
-                localStorage.removeItem('quakeph_drawings');
-                this.showNotification('All drawings cleared', 'success');
-            }
-        } else {
-            this.showNotification('No drawings to clear', 'info');
-        }
-    }
-    
-    // Initialize event listeners
-    initEventListeners() {
-        // Sidebar toggle
-        this.toggleSidebar.addEventListener('click', () => this.toggleSidebarView());
-        this.mobileToggle.addEventListener('click', () => this.toggleSidebarView());
-        
-        // Layer buttons
-        this.layerButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                // Update button states
-                this.layerButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                
-                // Switch layer
-                const layerId = button.dataset.layer;
-                this.switchLayer(layerId);
-            });
-        });
-        
-        // Earthquake panel
-        this.toggleQuakePanel.addEventListener('click', () => this.toggleEarthquakePanel());
-        this.closeQuakePanel.addEventListener('click', () => this.toggleEarthquakePanel());
-        
-        // Control buttons
-        this.toggleDrawing.addEventListener('click', () => this.toggleDrawingTools());
-        this.refreshBtn.addEventListener('click', () => this.loadEarthquakeData());
-        this.locateBtn.addEventListener('click', () => this.locateUser());
-        this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-        this.toggleLayers.addEventListener('click', () => this.toggleSidebarView());
-        
-        // Drawing buttons
-        this.drawButtons.marker.addEventListener('click', () => this.enterDrawingMode('marker'));
-        this.drawButtons.line.addEventListener('click', () => this.enterDrawingMode('polyline'));
-        this.drawButtons.polygon.addEventListener('click', () => this.enterDrawingMode('polygon'));
-        this.drawButtons.rectangle.addEventListener('click', () => this.enterDrawingMode('rectangle'));
-        this.drawButtons.circle.addEventListener('click', () => this.enterDrawingMode('circle'));
-        this.drawButtons.text.addEventListener('click', () => this.startTextDrawing());
-        this.drawButtons.delete.addEventListener('click', () => this.deleteSelectedDrawing());
-        this.drawButtons.clear.addEventListener('click', () => this.clearAllDrawings());
-        this.drawButtons.export.addEventListener('click', () => this.exportDrawings());
-        
-        // Drawing property controls
-        this.lineWidth.addEventListener('input', (e) => {
-            this.widthValue.textContent = e.target.value + 'px';
-        });
-        
-        this.fillOpacity.addEventListener('input', (e) => {
-            this.opacityValue.textContent = e.target.value + '%';
-        });
-        
-        this.textSize.addEventListener('input', (e) => {
-            this.textSizeValue.textContent = e.target.value + 'px';
-        });
-        
-        // Modal events
-        this.closeTextModal.addEventListener('click', () => this.closeTextModal());
-        this.cancelText.addEventListener('click', () => this.closeTextModal());
-        this.saveText.addEventListener('click', () => this.saveTextAnnotation());
-        
-        // Text drawing on map click
-        this.map.on('click', (e) => {
-            if (this.drawingMode === 'text') {
-                this.openTextModal(e.latlng);
-            }
-        });
-        
-        // Fullscreen change event
-        document.addEventListener('fullscreenchange', () => {
-            setTimeout(() => {
-                this.map.invalidateSize();
-            }, 300);
-        });
-        
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            setTimeout(() => {
-                this.map.invalidateSize();
-            }, 100);
-        });
-        
-        // Close earthquake panel when clicking outside on mobile
-        document.addEventListener('click', (event) => {
-            if (window.innerWidth <= 768 && 
-                this.quakePanel.classList.contains('active') &&
-                !this.quakePanel.contains(event.target) &&
-                !this.toggleQuakePanel.contains(event.target)) {
-                this.toggleEarthquakePanel();
-            }
-        });
-        
-        // Escape key to exit drawing mode
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isDrawingActive) {
-                this.exitDrawingMode();
+        Object.entries(this.drawButtons).forEach(([key, btn]) => {
+            if (btn && !['clear', 'export'].includes(key)) {
+                btn.classList.toggle('disabled', !isAvailable);
+                btn.disabled = !isAvailable;
             }
         });
     }
 }
 
-// Initialize application when DOM is loaded
+// Sticky Notes Manager Class
+class StickyNotesManager {
+    constructor(mainApp) {
+        this.mainApp = mainApp;
+        this.notes = [];
+        this.nextId = 1;
+        this.panelVisible = false;
+        this.currentEditId = null;
+        this.noteMarkers = new Map(); // Store map markers for notes
+        
+        this.init();
+    }
+    
+    init() {
+        this.cacheElements();
+        this.loadNotes();
+        this.setupEventListeners();
+        this.updateNotesList();
+        this.updateNotesCount();
+    }
+    
+    cacheElements() {
+        this.toggleBtn = document.getElementById('toggleNotesPanel');
+        this.panel = document.getElementById('notesPanel');
+        this.closeBtn = document.getElementById('closeNotesPanel');
+        this.notesList = document.getElementById('notesList');
+        this.addBtn = document.getElementById('addNoteBtn');
+        this.deleteAllBtn = document.getElementById('deleteAllNotesBtn');
+        this.notesCount = document.getElementById('notesCount');
+        
+        // Edit modal elements
+        this.editModal = document.getElementById('noteEditModal');
+        this.closeEditModal = document.getElementById('closeNoteEditModal');
+        this.cancelEdit = document.getElementById('cancelNoteEdit');
+        this.saveNote = document.getElementById('saveNote');
+        this.noteTitle = document.getElementById('noteTitle');
+        this.noteContent = document.getElementById('noteContent');
+        this.noteColor = document.getElementById('noteColor');
+    }
+    
+    setupEventListeners() {
+        if (this.toggleBtn) {
+            this.toggleBtn.addEventListener('click', () => this.togglePanel());
+        }
+        
+        if (this.closeBtn) {
+            this.closeBtn.addEventListener('click', () => this.hidePanel());
+        }
+        
+        if (this.addBtn) {
+            this.addBtn.addEventListener('click', () => this.openNewNoteModal());
+        }
+        
+        if (this.deleteAllBtn) {
+            this.deleteAllBtn.addEventListener('click', () => this.deleteAllNotes());
+        }
+        
+        if (this.closeEditModal) {
+            this.closeEditModal.addEventListener('click', () => this.closeModal());
+        }
+        
+        if (this.cancelEdit) {
+            this.cancelEdit.addEventListener('click', () => this.closeModal());
+        }
+        
+        if (this.saveNote) {
+            this.saveNote.addEventListener('click', () => this.saveNoteFromModal());
+        }
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.editModal?.classList.contains('active')) {
+                this.closeModal();
+            }
+        });
+        
+        // Click outside to close modal
+        if (this.editModal) {
+            this.editModal.addEventListener('click', (e) => {
+                if (e.target === this.editModal) {
+                    this.closeModal();
+                }
+            });
+        }
+    }
+    
+    togglePanel() {
+        if (this.panelVisible) {
+            this.hidePanel();
+        } else {
+            this.showPanel();
+        }
+    }
+    
+    showPanel() {
+        if (this.panel) {
+            this.panel.classList.add('active');
+            this.panelVisible = true;
+        }
+    }
+    
+    hidePanel() {
+        if (this.panel) {
+            this.panel.classList.remove('active');
+            this.panelVisible = false;
+        }
+    }
+    
+    openNewNoteModal() {
+        this.currentEditId = null;
+        if (this.noteTitle) this.noteTitle.value = '';
+        if (this.noteContent) this.noteContent.value = '';
+        if (this.noteColor) this.noteColor.value = '#ffd966';
+        if (this.editModal) {
+            this.editModal.classList.add('active');
+            if (this.noteTitle) this.noteTitle.focus();
+        }
+    }
+    
+    openEditNoteModal(id) {
+        const note = this.notes.find(n => n.id === id);
+        if (!note) return;
+        
+        this.currentEditId = id;
+        if (this.noteTitle) this.noteTitle.value = note.title;
+        if (this.noteContent) this.noteContent.value = note.content;
+        if (this.noteColor) this.noteColor.value = note.color || '#ffd966';
+        if (this.editModal) {
+            this.editModal.classList.add('active');
+            if (this.noteTitle) this.noteTitle.focus();
+        }
+    }
+    
+    closeModal() {
+        if (this.editModal) {
+            this.editModal.classList.remove('active');
+        }
+        this.currentEditId = null;
+    }
+    
+    saveNoteFromModal() {
+        if (!this.noteTitle || !this.noteContent || !this.noteColor) return;
+        
+        const title = this.noteTitle.value.trim() || 'Untitled Note';
+        const content = this.noteContent.value.trim();
+        
+        if (!content) {
+            alert('Please enter some content for the note.');
+            return;
+        }
+        
+        const color = this.noteColor.value;
+        
+        if (this.currentEditId) {
+            // Update existing note
+            this.updateNote(this.currentEditId, title, content, color);
+        } else {
+            // Create new note
+            this.createNote(title, content, color);
+        }
+        
+        this.closeModal();
+    }
+    
+    createNote(title, content, color = '#ffd966') {
+        const now = new Date().toISOString();
+        const note = {
+            id: this.nextId++,
+            title,
+            content,
+            color,
+            createdAt: now,
+            updatedAt: now,
+            position: this.mainApp && this.mainApp.state.map ? 
+                this.mainApp.state.map.getCenter() : null // Save map position
+        };
+        
+        this.notes.push(note);
+        this.saveNotes();
+        this.updateNotesList();
+        this.updateNotesCount();
+        
+        // Add to map if map exists
+        if (note.position) {
+            this.addNoteMarkerToMap(note);
+        }
+        
+        this.showNotification('Note created successfully!', 'success');
+    }
+    
+    updateNote(id, title, content, color) {
+        const note = this.notes.find(n => n.id === id);
+        if (note) {
+            note.title = title;
+            note.content = content;
+            note.color = color;
+            note.updatedAt = new Date().toISOString();
+            
+            this.saveNotes();
+            this.updateNotesList();
+            
+            // Update marker on map if it exists
+            this.updateNoteMarkerOnMap(note);
+            
+            this.showNotification('Note updated successfully!', 'success');
+        }
+    }
+    
+    deleteNote(id) {
+        if (confirm('Are you sure you want to delete this note?')) {
+            const note = this.notes.find(n => n.id === id);
+            if (note) {
+                // Remove from map
+                this.removeNoteMarkerFromMap(id);
+            }
+            
+            this.notes = this.notes.filter(n => n.id !== id);
+            this.saveNotes();
+            this.updateNotesList();
+            this.updateNotesCount();
+            this.showNotification('Note deleted', 'info');
+        }
+    }
+    
+    deleteAllNotes() {
+        if (this.notes.length === 0) {
+            this.showNotification('No notes to delete', 'info');
+            return;
+        }
+        
+        if (confirm('Are you sure you want to delete ALL notes? This cannot be undone.')) {
+            // Remove all markers from map
+            this.noteMarkers.forEach((marker, id) => {
+                if (this.mainApp && this.mainApp.state.map) {
+                    this.mainApp.state.map.removeLayer(marker);
+                }
+            });
+            this.noteMarkers.clear();
+            
+            this.notes = [];
+            this.saveNotes();
+            this.updateNotesList();
+            this.updateNotesCount();
+            this.showNotification('All notes deleted', 'info');
+        }
+    }
+    
+    saveNotes() {
+        try {
+            localStorage.setItem('quakeph_notes', JSON.stringify(this.notes));
+            localStorage.setItem('quakeph_notes_nextid', this.nextId.toString());
+        } catch (error) {
+            console.error('Error saving notes:', error);
+            this.showNotification('Error saving notes', 'error');
+        }
+    }
+    
+    loadNotes() {
+        try {
+            const savedNotes = localStorage.getItem('quakeph_notes');
+            if (savedNotes) {
+                this.notes = JSON.parse(savedNotes);
+            }
+            
+            const savedNextId = localStorage.getItem('quakeph_notes_nextid');
+            if (savedNextId) {
+                this.nextId = parseInt(savedNextId);
+            } else {
+                // Set nextId based on existing notes
+                this.nextId = this.notes.length > 0 
+                    ? Math.max(...this.notes.map(n => n.id)) + 1 
+                    : 1;
+            }
+            
+            // Restore markers on map after map is ready
+            setTimeout(() => {
+                if (this.mainApp && this.mainApp.state.map) {
+                    this.notes.forEach(note => {
+                        if (note.position) {
+                            this.addNoteMarkerToMap(note);
+                        }
+                    });
+                }
+            }, 1000);
+        } catch (error) {
+            console.error('Error loading notes:', error);
+            this.notes = [];
+            this.nextId = 1;
+        }
+    }
+    
+    updateNotesList() {
+        if (!this.notesList) return;
+        
+        if (this.notes.length === 0) {
+            this.notesList.innerHTML = '<div class="no-notes"><i class="far fa-sticky-note"></i> No notes yet. Click + to add one!</div>';
+            return;
+        }
+        
+        // Sort notes by updatedAt (most recent first)
+        const sortedNotes = [...this.notes].sort((a, b) => 
+            new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+        
+        this.notesList.innerHTML = sortedNotes.map(note => `
+            <div class="note-item" style="background: ${note.color}" data-id="${note.id}">
+                <div class="note-header">
+                    <div class="note-title">${this.escapeHtml(note.title)}</div>
+                    <div class="note-actions">
+                        <button class="note-action-btn edit-btn" title="Edit note">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="note-action-btn delete-btn" title="Delete note">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="note-content">${this.escapeHtml(note.content).replace(/\n/g, '<br>')}</div>
+                <div class="note-timestamp">
+                    ${this.formatDate(note.updatedAt)}
+                    ${note.position ? '<i class="fas fa-map-marker-alt" style="margin-left: 5px;" title="Placed on map"></i>' : ''}
+                </div>
+            </div>
+        `).join('');
+        
+        // Add event listeners
+        this.notesList.querySelectorAll('.note-item').forEach(item => {
+            const id = parseInt(item.dataset.id);
+            
+            item.addEventListener('click', (e) => {
+                if (!e.target.closest('.note-actions')) {
+                    this.openEditNoteModal(id);
+                }
+            });
+            
+            const editBtn = item.querySelector('.edit-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.openEditNoteModal(id);
+                });
+            }
+            
+            const deleteBtn = item.querySelector('.delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteNote(id);
+                });
+            }
+        });
+    }
+    
+    updateNotesCount() {
+        if (this.notesCount) {
+            this.notesCount.textContent = this.notes.length;
+            this.notesCount.style.display = this.notes.length > 0 ? 'flex' : 'none';
+        }
+    }
+    
+    addNoteMarkerToMap(note) {
+        if (!this.mainApp || !this.mainApp.state.map || !note.position) return;
+        
+        const map = this.mainApp.state.map;
+        
+        // Create custom marker for the note
+        const marker = L.marker([note.position.lat, note.position.lng], {
+            icon: L.divIcon({
+                className: 'map-note-marker',
+                html: `
+                    <div class="note-bubble" style="background: ${note.color}">
+                        <div class="bubble-title">${this.escapeHtml(note.title)}</div>
+                        <div class="bubble-preview">${this.escapeHtml(note.content.substring(0, 30))}${note.content.length > 30 ? '...' : ''}</div>
+                    </div>
+                `,
+                iconSize: [150, 50],
+                iconAnchor: [75, 25]
+            }),
+            draggable: true
+        }).addTo(map);
+        
+        // Store marker reference
+        this.noteMarkers.set(note.id, marker);
+        
+        // Add popup with full note
+        marker.bindPopup(`
+            <div style="max-width: 250px;">
+                <h4 style="margin:0 0 5px 0; color: #333;">${this.escapeHtml(note.title)}</h4>
+                <p style="margin:0 0 5px 0; color: #555;">${this.escapeHtml(note.content).replace(/\n/g, '<br>')}</p>
+                <small style="color: #777;">Updated: ${this.formatDate(note.updatedAt)}</small>
+                <div style="display: flex; gap: 5px; margin-top: 8px;">
+                    <button class="map-note-edit" data-id="${note.id}" style="flex:1; padding: 3px; background: #00b4d8; color: white; border: none; border-radius: 3px; cursor: pointer;">Edit</button>
+                    <button class="map-note-delete" data-id="${note.id}" style="flex:1; padding: 3px; background: #ff3b30; color: white; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+                </div>
+            </div>
+        `);
+        
+        // Handle popup button clicks
+        marker.on('popupopen', () => {
+            // Use setTimeout to ensure DOM elements are rendered
+            setTimeout(() => {
+                const editBtn = document.querySelector('.map-note-edit');
+                const deleteBtn = document.querySelector('.map-note-delete');
+                
+                if (editBtn) {
+                    editBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.openEditNoteModal(parseInt(e.target.dataset.id));
+                        map.closePopup();
+                    });
+                }
+                
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.deleteNote(parseInt(e.target.dataset.id));
+                        map.closePopup();
+                    });
+                }
+            }, 100);
+        });
+        
+        // Update note position when marker is dragged
+        marker.on('dragend', (e) => {
+            const newPos = e.target.getLatLng();
+            note.position = { lat: newPos.lat, lng: newPos.lng };
+            this.saveNotes();
+        });
+    }
+    
+    updateNoteMarkerOnMap(note) {
+        const marker = this.noteMarkers.get(note.id);
+        if (marker && this.mainApp && this.mainApp.state.map) {
+            // Update marker appearance
+            marker.setIcon(L.divIcon({
+                className: 'map-note-marker',
+                html: `
+                    <div class="note-bubble" style="background: ${note.color}">
+                        <div class="bubble-title">${this.escapeHtml(note.title)}</div>
+                        <div class="bubble-preview">${this.escapeHtml(note.content.substring(0, 30))}${note.content.length > 30 ? '...' : ''}</div>
+                    </div>
+                `,
+                iconSize: [150, 50],
+                iconAnchor: [75, 25]
+            }));
+            
+            // Update popup content
+            marker.setPopupContent(`
+                <div style="max-width: 250px;">
+                    <h4 style="margin:0 0 5px 0; color: #333;">${this.escapeHtml(note.title)}</h4>
+                    <p style="margin:0 0 5px 0; color: #555;">${this.escapeHtml(note.content).replace(/\n/g, '<br>')}</p>
+                    <small style="color: #777;">Updated: ${this.formatDate(note.updatedAt)}</small>
+                    <div style="display: flex; gap: 5px; margin-top: 8px;">
+                        <button class="map-note-edit" data-id="${note.id}" style="flex:1; padding: 3px; background: #00b4d8; color: white; border: none; border-radius: 3px; cursor: pointer;">Edit</button>
+                        <button class="map-note-delete" data-id="${note.id}" style="flex:1; padding: 3px; background: #ff3b30; color: white; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+                    </div>
+                </div>
+            `);
+        }
+    }
+    
+    removeNoteMarkerFromMap(id) {
+        const marker = this.noteMarkers.get(id);
+        if (marker && this.mainApp && this.mainApp.state.map) {
+            this.mainApp.state.map.removeLayer(marker);
+            this.noteMarkers.delete(id);
+        }
+    }
+    
+    toggleNoteOnMap(id) {
+        const note = this.notes.find(n => n.id === id);
+        if (!note) return;
+        
+        if (this.noteMarkers.has(id)) {
+            // Remove from map
+            this.removeNoteMarkerFromMap(id);
+            note.position = null;
+        } else {
+            // Add to map at current center
+            if (this.mainApp && this.mainApp.state.map) {
+                note.position = this.mainApp.state.map.getCenter();
+                this.addNoteMarkerToMap(note);
+            }
+        }
+        this.saveNotes();
+        this.updateNotesList();
+    }
+    
+    focusNoteOnMap(id) {
+        const marker = this.noteMarkers.get(id);
+        if (marker && this.mainApp && this.mainApp.state.map) {
+            this.mainApp.state.map.setView(marker.getLatLng(), 12);
+            marker.openPopup();
+        }
+    }
+    
+    getNotesOnMap() {
+        return Array.from(this.noteMarkers.keys()).map(id => 
+            this.notes.find(n => n.id === id)
+        ).filter(note => note);
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    formatDate(dateString) {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        
+        return date.toLocaleDateString();
+    }
+    
+    showNotification(message, type = 'info') {
+        if (this.mainApp && this.mainApp.showNotification) {
+            this.mainApp.showNotification(message, type);
+        } else {
+            // Fallback notification
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+    }
+}
+
+// Initialize application
 document.addEventListener('DOMContentLoaded', () => {
     window.quakeMap = new QuakePHMap();
 });
